@@ -126,15 +126,18 @@
       });
     }
 
+    var deskRoot = "";
+
     function pullDesk(key) {
-      var urls = ["/api/inbox"];
+      var roots = [""];
       var host = location.hostname;
-      if (host !== "127.0.0.1" && host !== "localhost") urls.push("http://127.0.0.1:8765/api/inbox");
+      if (host !== "127.0.0.1" && host !== "localhost") roots.push("http://127.0.0.1:8765");
       function once(i) {
-        if (i >= urls.length) return Promise.reject(new Error("sealed"));
-        return fetch(urls[i], { headers: { "X-Inbox-Key": key } }).then(function (res) {
+        if (i >= roots.length) return Promise.reject(new Error("sealed"));
+        return fetch(roots[i] + "/api/inbox", { headers: { "X-Inbox-Key": key } }).then(function (res) {
           if (res.status === 401) throw new Error("bad key");
           if (!res.ok) throw new Error("next");
+          deskRoot = roots[i];
           return res.json();
         }).catch(function (err) {
           if (err.message === "bad key") throw err;
@@ -157,15 +160,44 @@
           pile.innerHTML = "";
           return;
         }
+        deskRoot = "";
         openSealed(key);
       });
     }
 
     function drop(id) {
       var key = keyInput.value.trim();
-      fetch("/api/inbox/" + id, { method: "DELETE", headers: { "X-Inbox-Key": key } }).then(function () {
-        load();
-      });
+      var roots = [];
+      if (deskRoot) roots.push(deskRoot);
+      if (roots.indexOf("") === -1) roots.push("");
+      var host = location.hostname;
+      if (host !== "127.0.0.1" && host !== "localhost" && roots.indexOf("http://127.0.0.1:8765") === -1) {
+        roots.push("http://127.0.0.1:8765");
+      }
+      function once(i) {
+        if (i >= roots.length) {
+          statusNode.textContent = "couldn't delete that";
+          return;
+        }
+        fetch(roots[i] + "/api/inbox/" + id, {
+          method: "DELETE",
+          headers: { "X-Inbox-Key": key }
+        }).then(function (res) {
+          if (res.status === 401) {
+            statusNode.textContent = "that key didn't work";
+            return;
+          }
+          if (!res.ok) {
+            once(i + 1);
+            return;
+          }
+          deskRoot = roots[i];
+          load();
+        }).catch(function () {
+          once(i + 1);
+        });
+      }
+      once(0);
     }
 
     document.getElementById("gate").addEventListener("submit", function (e) {
