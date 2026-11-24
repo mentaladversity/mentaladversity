@@ -17,6 +17,12 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 SECRET_PATH = os.path.join(ROOT, ".inbox-secret")
 DATA_PATH = os.path.join(ROOT, "inbox-data.json")
 BLOCKED = {".inbox-secret", "inbox-data.json"}
+GIST_ID = "10139de4077471515386b5a280439afa"
+_FRAME_N = 160
+_FRAME_DT = 125
+_RING_KEEP = 800
+_ring_lock = threading.Lock()
+_ring = []
 
 
 def load_secret():
@@ -262,12 +268,87 @@ def _seed_wave(token, snap):
             return
 
 
+def _capture_frame():
+    wave = ears.current().get("wave") or []
+    n = _FRAME_N
+    if len(wave) < 8:
+        return [0] * n
+    span = len(wave)
+    out = []
+    for i in range(n):
+        sample = float(wave[min(span - 1, int(i * span / n))])
+        out.append(int(max(-127, min(127, round(sample * 70)))))
+    return out
+
+
+def _record_scope():
+    nxt = time.perf_counter()
+    while True:
+        nxt += _FRAME_DT / 1000
+        delay = nxt - time.perf_counter()
+        if delay > 0:
+            time.sleep(delay)
+        else:
+            nxt = time.perf_counter()
+        frame = _capture_frame()
+        with _ring_lock:
+            _ring.append(frame)
+            extra = len(_ring) - _RING_KEEP
+            if extra > 0:
+                del _ring[:extra]
+
+
+def _scope_blob(at_ms):
+    with _ring_lock:
+        frames = list(_ring)
+    if len(frames) < 8:
+        return None
+    peak = 0
+    for frame in frames:
+        for value in frame:
+            if abs(value) > peak:
+                peak = abs(value)
+    if peak < 3:
+        return None
+    raw = bytearray()
+    for frame in frames:
+        for value in frame:
+            raw.append(value & 0xFF)
+    return {
+        "n": _FRAME_N,
+        "dt": _FRAME_DT,
+        "t0": int(at_ms - (len(frames) - 1) * _FRAME_DT),
+        "b": base64.b64encode(bytes(raw)).decode("ascii"),
+    }
+
+
+def _patch_gist(token, payload):
+    url = "https://api.github.com/gists/" + GIST_ID
+    body = json.dumps({
+        "files": {
+            "now.json": {"content": json.dumps(payload, separators=(",", ":"))}
+        }
+    }).encode("utf-8")
+    headers = {
+        "Authorization": "Bearer " + token,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "bench",
+        "Content-Type": "application/json",
+    }
+    req = urllib.request.Request(url, data=body, method="PATCH", headers=headers)
+    with urllib.request.urlopen(req, timeout=20) as res:
+        res.read()
+
+
 def _mirror():
     last = None
-    held = False
+    last_gist = 0.0
+    wait_until = 0.0
     token = ""
     while True:
-        time.sleep(4)
+        time.sleep(2)
+        if time.time() < wait_until:
+            continue
         try:
             snap = desk.share()
             if not token:
@@ -278,26 +359,35 @@ def _mirror():
         except Exception:
             continue
         key = (snap["title"], snap["artist"], snap["art"], bool(snap["playing"]), bool(snap["open"]))
-        if key != last:
-            held = False
-        if key == last and (held or not wave):
+        changed = key != last
+        due = bool(snap["playing"]) and (time.time() - last_gist) >= 15
+        if not changed and not due:
             continue
-        snap["wave"] = wave
         if not token:
             token = _gh_token()
         if not token:
             continue
+        rich = dict(snap)
+        if wave:
+            rich["wave"] = wave
+        blob = _scope_blob(snap["at"])
+        if blob:
+            rich["scope"] = blob
         try:
-            _put_now(token, snap)
-            last = key
-            held = bool(wave)
-        except Exception:
+            _patch_gist(token, rich)
+        except Exception as err:
             token = ""
+            wait_until = time.time() + 15
+            print("now save failed", getattr(err, "code", ""))
+            continue
+        last_gist = time.time()
+        last = key
 
 
 if __name__ == "__main__":
     desk.start()
     ears.start()
+    threading.Thread(target=_record_scope, name="scope", daemon=True).start()
     threading.Thread(target=_mirror, name="now", daemon=True).start()
     port = int(os.environ.get("PORT", "8765"))
     ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()

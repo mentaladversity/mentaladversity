@@ -489,6 +489,7 @@ import "./heart.js";
   var seenHit = 0;
   var heardScope = 0;
   var heldWave = "";
+  var playedFrame = "";
   setInterval(function () {
     if (localAudio && playing && follow) return;
     fetch("/api/spectrum").then(function (res) { return res.json(); }).then(function (data) {
@@ -503,6 +504,13 @@ import "./heart.js";
   function borrowedWave() {
     if (localAudio && playing) return;
     if (performance.now() - heardScope < 800) return;
+    var frame = NowPlaying.frame(performance.now());
+    if (frame) {
+      if (frame.id === playedFrame) return;
+      playedFrame = frame.id;
+      scope.setWave(frame.samples);
+      return;
+    }
     var wave = NowPlaying.wave();
     if (!wave || wave.length < 8) return;
     var mark = wave.length + ":" + wave[0] + ":" + wave[wave.length >> 1] + ":" + wave[wave.length - 1];
