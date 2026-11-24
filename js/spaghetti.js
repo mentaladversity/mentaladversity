@@ -489,7 +489,6 @@ import "./heart.js";
   var seenHit = 0;
   var heardScope = 0;
   var heldWave = "";
-  var rollClock = 0;
   setInterval(function () {
     if (localAudio && playing && follow) return;
     fetch("/api/spectrum").then(function (res) { return res.json(); }).then(function (data) {
@@ -508,15 +507,9 @@ import "./heart.js";
     var wave = NowPlaying.wave();
     if (!wave || wave.length < 8) return;
     var mark = wave.length + ":" + wave[0] + ":" + wave[wave.length >> 1] + ":" + wave[wave.length - 1];
-    if (mark !== heldWave) {
-      heldWave = mark;
-      scope.hold(wave);
-      rollClock = 0;
-    }
-    scope.push(wave[rollClock % wave.length]);
-    rollClock++;
-    scope.push(wave[rollClock % wave.length]);
-    rollClock++;
+    if (mark === heldWave) return;
+    heldWave = mark;
+    scope.hold(wave);
   }
 
   function gmail(addr) {

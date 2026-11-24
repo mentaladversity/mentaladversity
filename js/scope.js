@@ -4,8 +4,11 @@
     const roll = new Float32Array(720);
     let rollHead = 0;
     let raw = [];
+    let locked = [];
+    let lockIndex = 0;
+    let lockAt = 0;
+    let liveAt = 0;
     let loud = 0;
-    let trigAt = 0;
     let mode = "trig";
     let time = "mid";
     let gain = 1;
@@ -59,16 +62,51 @@
       rollHead = (rollHead + 1) % roll.length;
     }
 
+    function findTrigger(samples, count) {
+      const room = Math.max(1, samples.length - count);
+      let peak = 0;
+      for (let i = 0; i < samples.length; i++) peak = Math.max(peak, Math.abs(samples[i]));
+      const minRise = Math.max(0.08, peak * 0.18);
+      let best = 0;
+      let bestRise = minRise;
+      for (let i = 1; i < room; i++) {
+        const rise = samples[i] - samples[i - 1];
+        if (samples[i - 1] <= 0 && samples[i] > 0 && rise > bestRise) {
+          bestRise = rise;
+          best = i;
+        }
+      }
+      return best;
+    }
+
+    function considerLock(force) {
+      if (!raw.length) return;
+      const now = performance.now();
+      if (!force && locked.length && now - lockAt < 900) return;
+      const count = Math.max(32, Math.floor(raw.length * (spanOf[time] || 0.42)));
+      locked = raw.slice();
+      lockIndex = findTrigger(locked, count);
+      lockAt = now;
+    }
+
     function setWave(samples) {
       if (!samples || !samples.length) return;
       absorb(samples);
-      const step = Math.max(1, Math.floor(samples.length / 40));
+      liveAt = performance.now();
+      const step = Math.max(1, Math.floor(samples.length / 8));
       for (let i = 0; i < samples.length; i += step) push(samples[i]);
+      considerLock(false);
+    }
+
+    function hold(samples) {
+      absorb(samples);
+      considerLock(true);
     }
 
     function windowed() {
       const frac = spanOf[time] || 0.42;
-      if (mode === "roll") {
+      const rolling = mode === "roll" && performance.now() - liveAt < 400;
+      if (rolling) {
         const count = Math.max(32, Math.floor(roll.length * frac));
         const out = new Array(count);
         for (let i = 0; i < count; i++) {
@@ -76,38 +114,11 @@
         }
         return out;
       }
-      if (!raw.length) return [];
-      const count = Math.max(32, Math.floor(raw.length * frac));
-      const room = Math.max(1, raw.length - count);
-      let peak = 0;
-      for (let i = 0; i < raw.length; i++) peak = Math.max(peak, Math.abs(raw[i]));
-      const minRise = Math.max(0.08, peak * 0.18);
-      let best = -1;
-      let bestRise = minRise;
-      for (let i = 1; i < room; i++) {
-        const rise = raw[i] - raw[i - 1];
-        if (raw[i - 1] <= 0 && raw[i] > 0 && rise > bestRise) {
-          bestRise = rise;
-          best = i;
-        }
-      }
-      if (best >= 0 && trigAt) {
-        let near = -1;
-        let nearRise = bestRise * 0.55;
-        const lo = Math.max(1, trigAt - 30);
-        const hi = Math.min(room, trigAt + 30);
-        for (let i = lo; i < hi; i++) {
-          const rise = raw[i] - raw[i - 1];
-          if (raw[i - 1] <= 0 && raw[i] > 0 && rise > nearRise) {
-            nearRise = rise;
-            near = i;
-          }
-        }
-        if (near >= 0) best = near;
-      }
-      if (best < 0) best = Math.min(trigAt, room - 1);
-      trigAt = best;
-      return raw.slice(best, best + count);
+      const src = locked.length ? locked : raw;
+      if (!src.length) return [];
+      const count = Math.max(32, Math.min(src.length, Math.floor(src.length * frac)));
+      const start = Math.min(lockIndex, Math.max(0, src.length - count));
+      return src.slice(start, start + count);
     }
 
     function frame() {
@@ -152,7 +163,7 @@
       frame: frame,
       resize: resize,
       setWave: setWave,
-      hold: absorb,
+      hold: hold,
       push: push,
       loud: function () { return loud; }
     };
