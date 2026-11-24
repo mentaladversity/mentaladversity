@@ -12,6 +12,42 @@ import "./heart.js";
   var meta = document.getElementById("spotmeta");
   var mq = window.matchMedia("(max-width: 800px)");
 
+  function fitHello() {
+    var el = document.getElementById("hello");
+    if (!el || !bench) return;
+    var boxes = bench.querySelectorAll(".gizmo");
+    function hits() {
+      var mine = el.getBoundingClientRect();
+      if (mine.width < 2) return false;
+      for (var i = 0; i < boxes.length; i++) {
+        var box = boxes[i].getBoundingClientRect();
+        if (mine.left < box.right + 8 && mine.right > box.left && mine.top < box.bottom && mine.bottom > box.top) return true;
+      }
+      return false;
+    }
+    el.style.right = "22px";
+    el.style.top = "18px";
+    var size = 56;
+    el.style.fontSize = size + "px";
+    while (hits() && size > 16) {
+      size -= 2;
+      el.style.fontSize = size + "px";
+    }
+    if (!hits()) return;
+    var top = window.innerHeight;
+    for (var i = 0; i < boxes.length; i++) {
+      var edge = boxes[i].getBoundingClientRect().top;
+      if (edge < top) top = edge;
+    }
+    var height = el.getBoundingClientRect().height || size;
+    while (size > 13 && height + 10 > top) {
+      size -= 1;
+      el.style.fontSize = size + "px";
+      height = el.getBoundingClientRect().height || size;
+    }
+    el.style.top = Math.max(4, top - height - 6) + "px";
+  }
+
   (function typeHello() {
     var el = document.getElementById("hello");
     if (!el) return;
@@ -21,6 +57,7 @@ import "./heart.js";
     function step() {
       el.textContent = line.slice(0, i);
       el.appendChild(caret);
+      fitHello();
       if (i >= line.length) return;
       var wait = i === 0 ? 280 : 130;
       i += 1;
@@ -601,6 +638,7 @@ import "./heart.js";
     heart.resize();
     scope.resize();
     sizePad(true);
+    fitHello();
     drawWires();
   });
 })();
