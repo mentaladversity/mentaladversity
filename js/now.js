@@ -54,7 +54,7 @@
   function gone(info) {
     if (previewDown) return true;
     if (!info || typeof info.at !== "number" || info.at < 1000000000000) return false;
-    return Date.now() - info.at > 210000;
+    return Date.now() - info.at > 480000;
   }
 
   function paintLast(info) {
@@ -258,11 +258,9 @@
     }
   }
 
-  async function pullPublic() {
-    var data = await pullGist();
-    if (data) return data;
+  async function pullGistFile() {
     try {
-      var res = await fetch("https://raw.githubusercontent.com/mentaladversity/mentaladversity/main/now.json?t=" + Date.now(), { cache: "no-store" });
+      var res = await fetch("https://gist.githubusercontent.com/mentaladversity/" + GIST + "/raw/now.json", { cache: "no-store" });
       if (!res.ok) return null;
       return await res.json();
     } catch (err) {
@@ -270,11 +268,17 @@
     }
   }
 
+  async function pullPublic() {
+    var data = await pullGist();
+    if (data) return data;
+    return pullGistFile();
+  }
+
   async function poll() {
     var data = await pullLocal();
     if (!data) {
       if (publicAt > Date.now()) return;
-      publicAt = Date.now() + 65000;
+      publicAt = Date.now() + 90000;
       data = await pullPublic();
     }
     if (!data) {

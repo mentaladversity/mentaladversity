@@ -443,7 +443,9 @@ def _mirror():
             continue
         key = (snap["title"], snap["artist"], snap["art"], bool(snap["playing"]), bool(snap["open"]))
         changed = key != last
-        due = (time.time() - last_gist) >= (15 if snap["playing"] else 45)
+        if last_gist and time.time() - last_gist < 40:
+            continue
+        due = (time.time() - last_gist) >= (50 if snap["playing"] else 90)
         if not changed and not due:
             continue
         if not token:
@@ -459,10 +461,21 @@ def _mirror():
                 rich["scope"] = blob
         try:
             _patch_gist(token, rich)
-        except Exception as err:
+        except urllib.error.HTTPError as err:
+            reset = err.headers.get("X-RateLimit-Reset") if err.headers else ""
+            wait = 60
+            try:
+                if reset:
+                    wait = max(60, int(reset) - time.time() + 2)
+            except ValueError:
+                wait = 60
+            wait_until = time.time() + wait
+            print("now save failed", err.code, flush=True)
+            continue
+        except Exception:
             token = ""
-            wait_until = time.time() + 15
-            print("now save failed", getattr(err, "code", ""))
+            wait_until = time.time() + 30
+            print("now save failed", flush=True)
             continue
         last_gist = time.time()
         last = key
