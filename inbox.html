@@ -7,6 +7,7 @@
   <meta name="robots" content="noindex">
   <link rel="icon" href="favicon.svg">
   <link rel="stylesheet" href="css/site.css">
+  <script src="js/seal.js?v=1"></script>
 </head>
 <body>
   <div class="wrap">
@@ -104,22 +105,8 @@
       return raw.json();
     }
 
-    async function unseal(packed, key) {
-      var material = await crypto.subtle.importKey("raw", new TextEncoder().encode(key), "PBKDF2", false, ["deriveKey"]);
-      var aes = await crypto.subtle.deriveKey(
-        { name: "PBKDF2", salt: bytesOf(packed.salt), iterations: packed.iter || 200000, hash: "SHA-256" },
-        material,
-        { name: "AES-GCM", length: 256 },
-        false,
-        ["decrypt"]
-      );
-      try {
-        var clear = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytesOf(packed.iv) }, aes, bytesOf(packed.ct));
-        var items = JSON.parse(new TextDecoder().decode(clear));
-        return Array.isArray(items) ? items : [];
-      } catch (err) {
-        throw new Error("bad key");
-      }
+    function unseal(packed, key) {
+      return InboxLock.unseal(packed, key);
     }
 
     function openSealed(key) {

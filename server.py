@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -178,21 +179,26 @@ def _items_hash(items):
 
 
 def _seal(items):
-    from cryptography.hazmat.primitives import hashes
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-
+    iterations = 20000
     salt = os.urandom(16)
-    iv = os.urandom(12)
-    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=200000)
-    key = kdf.derive(SECRET.encode("utf-8"))
-    locked = AESGCM(key).encrypt(iv, json.dumps(items).encode("utf-8"), None)
+    iv = os.urandom(16)
+    material = hashlib.pbkdf2_hmac("sha256", SECRET.encode("utf-8"), salt, iterations, dklen=64)
+    enc_key, mac_key = material[:32], material[32:]
+    plain = json.dumps(items).encode("utf-8")
+    stream = bytearray()
+    counter = 0
+    while len(stream) < len(plain):
+        stream.extend(hmac.new(enc_key, iv + counter.to_bytes(4, "big"), hashlib.sha256).digest())
+        counter += 1
+    locked = bytes(left ^ right for left, right in zip(plain, stream))
+    tag = hmac.new(mac_key, iv + locked, hashlib.sha256).digest()
     return {
-        "v": 1,
-        "iter": 200000,
+        "v": 2,
+        "iter": iterations,
         "salt": base64.b64encode(salt).decode("ascii"),
         "iv": base64.b64encode(iv).decode("ascii"),
         "ct": base64.b64encode(locked).decode("ascii"),
+        "tag": base64.b64encode(tag).decode("ascii"),
     }
 
 
