@@ -2,6 +2,7 @@
   var onTrack = function () {};
   var anchor = { progress: 0, at: 0, duration: 0, playing: false };
   var lastKey = "";
+  var publicAt = 0;
 
   function clock(ms) {
     var s = Math.max(0, Math.floor(ms / 1000));
@@ -68,13 +69,6 @@
     }
   }
 
-  function read64(b64) {
-    var bin = atob(String(b64 || "").replace(/\s/g, ""));
-    var bytes = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return new TextDecoder().decode(bytes);
-  }
-
   async function pullLocal() {
     try {
       var res = await fetch("/api/playing");
@@ -87,10 +81,9 @@
 
   async function pullPublic() {
     try {
-      var res = await fetch("https://api.github.com/repos/mentaladversity/mentaladversity/contents/now.json?t=" + Date.now(), { cache: "no-store" });
+      var res = await fetch("https://raw.githubusercontent.com/mentaladversity/mentaladversity/main/now.json?t=" + Date.now(), { cache: "no-store" });
       if (!res.ok) return null;
-      var body = await res.json();
-      var info = JSON.parse(read64(body.content));
+      var info = await res.json();
       if (info && info.playing && info.at) {
         var moved = (info.progress || 0) + Math.max(0, Date.now() - info.at);
         info.progress = info.duration ? Math.min(info.duration, moved) : moved;
@@ -103,7 +96,11 @@
 
   async function poll() {
     var data = await pullLocal();
-    if (!data) data = await pullPublic();
+    if (!data) {
+      if (publicAt > Date.now()) return;
+      publicAt = Date.now() + 8000;
+      data = await pullPublic();
+    }
     if (!data) {
       note("");
       var box = document.getElementById("now");
