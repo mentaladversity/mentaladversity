@@ -70,7 +70,12 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/api/playing":
-            self.send_json(200, desk.current())
+            snap = desk.current()
+            wave = _clip_wave(snap)
+            if wave:
+                snap = dict(snap)
+                snap["wave"] = wave
+            self.send_json(200, snap)
             return
         if path == "/api/spectrum":
             self.send_json(200, ears.current())
@@ -190,11 +195,17 @@ def _put_now(token, payload):
         res.read()
 
 
-def _clip_wave():
+_kept = {"key": "", "wave": []}
+_seeded = False
+
+
+def _song_key(snap):
+    return (snap.get("title") or "") + "\0" + (snap.get("artist") or "")
+
+
+def _clip_wave(snap):
     wave = ears.current().get("wave") or []
-    if not wave:
-        return []
-    step = max(1, len(wave) // 160)
+    step = max(1, len(wave) // 160) if wave else 1
     out = []
     for i in range(0, len(wave), step):
         out.append(round(float(wave[i]), 3))
@@ -203,9 +214,52 @@ def _clip_wave():
     peak = 0.0
     for value in out:
         peak = max(peak, abs(value))
-    if peak < 0.04:
-        return []
-    return out
+    key = _song_key(snap)
+    if peak >= 0.04:
+        _kept["key"] = key
+        _kept["wave"] = out
+        return out
+    if _kept["key"] == key and _kept["wave"]:
+        return _kept["wave"]
+    return []
+
+
+def _seed_wave(token, snap):
+    global _seeded
+    if _seeded or _kept["wave"]:
+        _seeded = True
+        return
+    _seeded = True
+    headers = {
+        "Authorization": "Bearer " + token,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "bench",
+    }
+    url = "https://api.github.com/repos/mentaladversity/mentaladversity/commits?path=now.json&per_page=8"
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=8) as res:
+            commits = json.load(res)
+    except Exception:
+        return
+    want = _song_key(snap)
+    for item in commits:
+        sha = item.get("sha") or ""
+        if not sha:
+            continue
+        file_url = "https://api.github.com/repos/mentaladversity/mentaladversity/contents/now.json?ref=" + sha
+        try:
+            req = urllib.request.Request(file_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=8) as res:
+                body = json.load(res)
+            data = json.loads(base64.b64decode(body.get("content") or ""))
+        except Exception:
+            continue
+        wave = data.get("wave") or []
+        if _song_key(data) == want and len(wave) >= 8:
+            _kept["key"] = want
+            _kept["wave"] = wave
+            return
 
 
 def _mirror():
@@ -216,7 +270,11 @@ def _mirror():
         time.sleep(4)
         try:
             snap = desk.share()
-            wave = _clip_wave()
+            if not token:
+                token = _gh_token()
+            if token and not _kept["wave"]:
+                _seed_wave(token, snap)
+            wave = _clip_wave(snap)
         except Exception:
             continue
         key = (snap["title"], snap["artist"], snap["art"], bool(snap["playing"]), bool(snap["open"]))

@@ -493,8 +493,7 @@ import "./heart.js";
     if (localAudio && playing && follow) return;
     fetch("/api/spectrum").then(function (res) { return res.json(); }).then(function (data) {
       if (!data) return;
-      heardScope = performance.now();
-      if (data.wave) scope.setWave(data.wave);
+      if (data.wave && scope.setWave(data.wave)) heardScope = performance.now();
       if (!data.live || !data.hit || data.hit === seenHit) return;
       seenHit = data.hit;
       flash();

@@ -109,7 +109,7 @@
       return;
     }
     note("");
-    if ("wave" in data) sharedWave = data.wave || [];
+    if (data.wave && data.wave.length > 7) sharedWave = data.wave;
     if (!data.title) {
       quiet(!!data.open);
       return;
