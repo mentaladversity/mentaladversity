@@ -80,26 +80,34 @@
     }
   }
 
-  async function pullPublic() {
-    try {
-      var res = await fetch("now.json?t=" + Date.now(), { cache: "no-store" });
-      if (!res.ok) return null;
-      var info = await res.json();
-      if (info && info.playing && info.at) {
-        var moved = (info.progress || 0) + Math.max(0, Date.now() - info.at);
-        info.progress = info.duration ? Math.min(info.duration, moved) : moved;
-      }
-      return info;
-    } catch (err) {
-      return null;
+  function catchUp(info) {
+    if (info && info.playing && info.at) {
+      var moved = (info.progress || 0) + Math.max(0, Date.now() - info.at);
+      info.progress = info.duration ? Math.min(info.duration, moved) : moved;
     }
+    return info;
+  }
+
+  async function pullPublic() {
+    var urls = [
+      "https://raw.githubusercontent.com/mentaladversity/mentaladversity/main/now.json?t=" + Date.now(),
+      "now.json?t=" + Date.now()
+    ];
+    for (var i = 0; i < urls.length; i++) {
+      try {
+        var res = await fetch(urls[i], { cache: "no-store" });
+        if (!res.ok) continue;
+        return catchUp(await res.json());
+      } catch (err) {}
+    }
+    return null;
   }
 
   async function poll() {
     var data = await pullLocal();
     if (!data) {
       if (publicAt > Date.now()) return;
-      publicAt = Date.now() + 8000;
+      publicAt = Date.now() + 4000;
       data = await pullPublic();
     }
     if (!data) {
