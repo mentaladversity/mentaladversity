@@ -343,13 +343,34 @@ import "./heart.js";
     localStorage.removeItem("bench-doodle");
   });
 
-  function sendIn(body) {
-    return fetch("/api/send", {
+  function sendNote(text) {
+    var line = document.getElementById("sendstatus");
+    if (line) line.textContent = text || "";
+  }
+
+  function postNote(url, body) {
+    return fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     }).then(function (res) {
       if (!res.ok) throw new Error("nope");
+    });
+  }
+
+  function sendIn(body) {
+    var job = postNote("/api/send", body);
+    var host = location.hostname;
+    if (host !== "127.0.0.1" && host !== "localhost") {
+      job = job.catch(function () {
+        return postNote("http://127.0.0.1:8765/api/send", body);
+      });
+    }
+    return job.then(function () {
+      sendNote("sent");
+    }).catch(function () {
+      sendNote("couldn't send that");
+      throw new Error("nope");
     });
   }
 
@@ -363,7 +384,10 @@ import "./heart.js";
       kind: "drawing",
       name: "",
       image: pad.toDataURL("image/png")
-    });
+    }).then(function () {
+      pctx.clearRect(0, 0, pad.width, pad.height);
+      localStorage.removeItem("bench-doodle");
+    }).catch(function () {});
   });
 
   document.getElementById("noteform").addEventListener("submit", function (e) {

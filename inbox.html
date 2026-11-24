@@ -126,15 +126,29 @@
       });
     }
 
+    function pullDesk(key) {
+      var urls = ["/api/inbox"];
+      var host = location.hostname;
+      if (host !== "127.0.0.1" && host !== "localhost") urls.push("http://127.0.0.1:8765/api/inbox");
+      function once(i) {
+        if (i >= urls.length) return Promise.reject(new Error("sealed"));
+        return fetch(urls[i], { headers: { "X-Inbox-Key": key } }).then(function (res) {
+          if (res.status === 401) throw new Error("bad key");
+          if (!res.ok) throw new Error("next");
+          return res.json();
+        }).catch(function (err) {
+          if (err.message === "bad key") throw err;
+          return once(i + 1);
+        });
+      }
+      return once(0);
+    }
+
     function load() {
       var key = keyInput.value.trim();
       if (!key) return;
       statusNode.textContent = "looking";
-      fetch("/api/inbox", { headers: { "X-Inbox-Key": key } }).then(function (res) {
-        if (res.status === 401) throw new Error("bad key");
-        if (!res.ok) throw new Error("sealed");
-        return res.json();
-      }).then(function (data) {
+      pullDesk(key).then(function (data) {
         sessionStorage.setItem("inbox-key", key);
         showItems(data.items || []);
       }).catch(function (err) {

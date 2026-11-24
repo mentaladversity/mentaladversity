@@ -20,6 +20,14 @@ SECRET_PATH = os.path.join(ROOT, ".inbox-secret")
 DATA_PATH = os.path.join(ROOT, "inbox-data.json")
 STAMP_PATH = os.path.join(ROOT, ".inbox-seal")
 BLOCKED = {".inbox-secret", "inbox-data.json", ".inbox-seal"}
+ALLOWED_ORIGINS = {
+    "http://www.mentaladversity.space",
+    "https://www.mentaladversity.space",
+    "http://mentaladversity.space",
+    "https://mentaladversity.space",
+    "http://127.0.0.1:8765",
+    "http://localhost:8765",
+}
 GIST_ID = "10139de4077471515386b5a280439afa"
 _FRAME_N = 160
 _FRAME_DT = 125
@@ -52,10 +60,35 @@ def load_items():
     return data if isinstance(data, list) else []
 
 
+_publish_lock = threading.Lock()
+_publish_pending = None
+_publish_busy = False
+
+
 def save_items(items):
+    global _publish_busy
     with open(DATA_PATH, "w", encoding="utf-8") as handle:
         json.dump(items, handle)
-    threading.Thread(target=_publish_inbox, args=(list(items),), daemon=True).start()
+    start = False
+    with _publish_lock:
+        _publish_pending = list(items)
+        if not _publish_busy:
+            _publish_busy = True
+            start = True
+    if start:
+        threading.Thread(target=_publish_loop, name="inbox", daemon=True).start()
+
+
+def _publish_loop():
+    global _publish_busy
+    while True:
+        with _publish_lock:
+            items = _publish_pending
+            _publish_pending = None
+            if items is None:
+                _publish_busy = False
+                return
+        _publish_inbox(items)
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -63,8 +96,23 @@ class Handler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=ROOT, **kwargs)
 
     def end_headers(self):
+        origin = self.headers.get("Origin", "")
+        if origin in ALLOWED_ORIGINS:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
+
+    def do_OPTIONS(self):
+        if self.headers.get("Origin", "") not in ALLOWED_ORIGINS:
+            self.send_error(404)
+            return
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Inbox-Key")
+        self.send_header("Access-Control-Max-Age", "600")
+        self.end_headers()
 
     def authorized(self):
         return self.headers.get("X-Inbox-Key", "") == SECRET
