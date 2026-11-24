@@ -319,6 +319,8 @@ header p {
   align-items: center;
 }
 
+#now[hidden] { display: none; }
+
 #now.bare {
   grid-template-columns: 1fr;
 }
@@ -333,7 +335,7 @@ header p {
   height: 72px;
   grid-row: 1 / span 2;
   object-fit: cover;
-  background: #111;
+  background: #fff;
 }
 
 #nowtitle { margin: 0; }

@@ -2,6 +2,7 @@ import asyncio
 import ctypes
 import json
 import threading
+import time
 import urllib.parse
 import urllib.request
 from ctypes import wintypes
@@ -23,6 +24,30 @@ _art_lock = threading.Lock()
 def current():
     with _lock:
         return dict(_snap)
+
+
+def share():
+    snap = current()
+    art = snap.get("art") or ""
+    key = (snap.get("artist") or "") + "\0" + (snap.get("title") or "")
+    if not str(art).startswith("http"):
+        with _art_lock:
+            cached = _art["url"] if _art["key"] == key else ""
+        if str(cached).startswith("http"):
+            art = cached
+        elif snap.get("title"):
+            _cover(snap.get("artist") or "", snap.get("title") or "")
+            art = ""
+    return {
+        "title": snap.get("title") or "",
+        "artist": snap.get("artist") or "",
+        "art": art if str(art).startswith("http") else "",
+        "playing": bool(snap.get("playing")),
+        "progress": int(snap.get("progress") or 0),
+        "duration": int(snap.get("duration") or 0),
+        "open": bool(snap.get("open")),
+        "at": int(time.time() * 1000),
+    }
 
 
 def start():

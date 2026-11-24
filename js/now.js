@@ -68,23 +68,54 @@
     }
   }
 
-  async function poll() {
+  function read64(b64) {
+    var bin = atob(String(b64 || "").replace(/\s/g, ""));
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+
+  async function pullLocal() {
     try {
       var res = await fetch("/api/playing");
-      if (!res.ok) {
-        note("player didn't answer");
-        return;
-      }
-      var data = await res.json();
-      note("");
-      if (!data.title) {
-        quiet(!!data.open);
-        return;
-      }
-      show(data);
+      if (!res.ok) return null;
+      return await res.json();
     } catch (err) {
-      note("player didn't answer");
+      return null;
     }
+  }
+
+  async function pullPublic() {
+    try {
+      var res = await fetch("https://api.github.com/repos/mentaladversity/mentaladversity/contents/now.json?t=" + Date.now(), { cache: "no-store" });
+      if (!res.ok) return null;
+      var body = await res.json();
+      var info = JSON.parse(read64(body.content));
+      if (info && info.playing && info.at) {
+        var moved = (info.progress || 0) + Math.max(0, Date.now() - info.at);
+        info.progress = info.duration ? Math.min(info.duration, moved) : moved;
+      }
+      return info;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  async function poll() {
+    var data = await pullLocal();
+    if (!data) data = await pullPublic();
+    if (!data) {
+      note("");
+      var box = document.getElementById("now");
+      if (box) box.hidden = true;
+      return;
+    }
+    note("");
+    if (!data.title) {
+      quiet(!!data.open);
+      return;
+    }
+    show(data);
   }
 
   function tick() {

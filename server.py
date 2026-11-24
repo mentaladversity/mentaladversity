@@ -1,7 +1,12 @@
+import base64
 import json
 import os
 import secrets
+import subprocess
+import threading
 import time
+import urllib.error
+import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
@@ -138,8 +143,79 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json(200, {"ok": True})
 
 
+def _gh_token():
+    env = os.environ.copy()
+    env["GH_CONFIG_DIR"] = os.path.join(os.path.expanduser("~"), ".config", "gh-personal")
+    try:
+        out = subprocess.check_output(
+            ["gh", "auth", "token"],
+            env=env,
+            stderr=subprocess.DEVNULL,
+            timeout=8,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return out.decode("utf-8", "replace").strip()
+
+
+def _put_now(token, payload):
+    url = "https://api.github.com/repos/mentaladversity/mentaladversity/contents/now.json"
+    headers = {
+        "Authorization": "Bearer " + token,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "bench",
+    }
+    sha = ""
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=8) as res:
+            sha = json.load(res).get("sha") or ""
+    except urllib.error.HTTPError as err:
+        if err.code != 404:
+            raise
+    body = {
+        "message": "now playing",
+        "content": base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii"),
+    }
+    if sha:
+        body["sha"] = sha
+    raw = json.dumps(body).encode("utf-8")
+    put = urllib.request.Request(
+        url,
+        data=raw,
+        method="PUT",
+        headers=dict(headers, **{"Content-Type": "application/json"}),
+    )
+    with urllib.request.urlopen(put, timeout=8) as res:
+        res.read()
+
+
+def _mirror():
+    last = None
+    token = ""
+    while True:
+        time.sleep(4)
+        try:
+            snap = desk.share()
+        except Exception:
+            continue
+        key = (snap["title"], snap["artist"], snap["art"], bool(snap["playing"]), bool(snap["open"]))
+        if key == last:
+            continue
+        if not token:
+            token = _gh_token()
+        if not token:
+            continue
+        try:
+            _put_now(token, snap)
+            last = key
+        except Exception:
+            token = ""
+
+
 if __name__ == "__main__":
     desk.start()
     ears.start()
+    threading.Thread(target=_mirror, name="now", daemon=True).start()
     port = int(os.environ.get("PORT", "8765"))
     ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
