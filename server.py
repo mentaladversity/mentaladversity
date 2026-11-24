@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 import os
 import secrets
@@ -16,7 +17,8 @@ import ears
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SECRET_PATH = os.path.join(ROOT, ".inbox-secret")
 DATA_PATH = os.path.join(ROOT, "inbox-data.json")
-BLOCKED = {".inbox-secret", "inbox-data.json"}
+STAMP_PATH = os.path.join(ROOT, ".inbox-seal")
+BLOCKED = {".inbox-secret", "inbox-data.json", ".inbox-seal"}
 GIST_ID = "10139de4077471515386b5a280439afa"
 _FRAME_N = 160
 _FRAME_DT = 125
@@ -52,6 +54,7 @@ def load_items():
 def save_items(items):
     with open(DATA_PATH, "w", encoding="utf-8") as handle:
         json.dump(items, handle)
+    threading.Thread(target=_publish_inbox, args=(list(items),), daemon=True).start()
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -167,6 +170,80 @@ def _gh_token():
     except (OSError, subprocess.SubprocessError):
         return ""
     return out.decode("utf-8", "replace").strip()
+
+
+def _items_hash(items):
+    raw = json.dumps(items, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _seal(items):
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+    salt = os.urandom(16)
+    iv = os.urandom(12)
+    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=200000)
+    key = kdf.derive(SECRET.encode("utf-8"))
+    locked = AESGCM(key).encrypt(iv, json.dumps(items).encode("utf-8"), None)
+    return {
+        "v": 1,
+        "iter": 200000,
+        "salt": base64.b64encode(salt).decode("ascii"),
+        "iv": base64.b64encode(iv).decode("ascii"),
+        "ct": base64.b64encode(locked).decode("ascii"),
+    }
+
+
+def _put_file(token, name, text, message):
+    url = "https://api.github.com/repos/mentaladversity/mentaladversity/contents/" + name
+    headers = {
+        "Authorization": "Bearer " + token,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "bench",
+    }
+    sha = ""
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=8) as res:
+            sha = json.load(res).get("sha") or ""
+    except urllib.error.HTTPError as err:
+        if err.code != 404:
+            raise
+    body = {
+        "message": message,
+        "content": base64.b64encode(text.encode("utf-8")).decode("ascii"),
+    }
+    if sha:
+        body["sha"] = sha
+    put = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        method="PUT",
+        headers=dict(headers, **{"Content-Type": "application/json"}),
+    )
+    with urllib.request.urlopen(put, timeout=20) as res:
+        res.read()
+
+
+def _publish_inbox(items):
+    digest = _items_hash(items)
+    if os.path.exists(STAMP_PATH):
+        with open(STAMP_PATH, encoding="utf-8") as handle:
+            if handle.read().strip() == digest:
+                return
+    token = _gh_token()
+    if not token or not SECRET:
+        print("inbox lock skipped")
+        return
+    try:
+        _put_file(token, "inbox.enc", json.dumps(_seal(items), separators=(",", ":")), "lock the inbox")
+    except Exception as err:
+        print("inbox lock failed", getattr(err, "code", ""))
+        return
+    with open(STAMP_PATH, "w", encoding="utf-8") as handle:
+        handle.write(digest)
 
 
 def _put_now(token, payload):
@@ -390,5 +467,6 @@ if __name__ == "__main__":
     ears.start()
     threading.Thread(target=_record_scope, name="scope", daemon=True).start()
     threading.Thread(target=_mirror, name="now", daemon=True).start()
+    threading.Thread(target=_publish_inbox, args=(load_items(),), name="inbox", daemon=True).start()
     port = int(os.environ.get("PORT", "8765"))
     ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()

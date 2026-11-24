@@ -28,7 +28,14 @@
     var saved = sessionStorage.getItem("inbox-key");
     if (saved) keyInput.value = saved;
 
-    function paint(items) {
+    function bytesOf(text) {
+      var bin = atob(text);
+      var out = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    }
+
+    function paint(items, canDrop) {
       pile.innerHTML = "";
       if (!items.length) {
         var empty = document.createElement("p");
@@ -62,13 +69,74 @@
           img.style.display = "block";
           card.appendChild(img);
         }
-        var remove = document.createElement("button");
-        remove.type = "button";
-        remove.textContent = "delete";
-        remove.style.marginTop = "10px";
-        remove.addEventListener("click", function () { drop(item.id); });
-        card.appendChild(remove);
+        if (canDrop) {
+          var remove = document.createElement("button");
+          remove.type = "button";
+          remove.textContent = "delete";
+          remove.style.marginTop = "10px";
+          remove.addEventListener("click", function () { drop(item.id); });
+          card.appendChild(remove);
+        }
         pile.appendChild(card);
+      });
+    }
+
+    function showItems(items) {
+      statusNode.textContent = items.length ? items.length + " sent" : "nothing yet.";
+      paint(items, true);
+    }
+
+    async function pullSealed() {
+      var api = await fetch("https://api.github.com/repos/mentaladversity/mentaladversity/contents/inbox.enc?ref=main", {
+        headers: { Accept: "application/vnd.github+json" },
+        cache: "no-store"
+      });
+      if (api.status === 404) return null;
+      if (api.ok) {
+        var body = await api.json();
+        if (body.content && !body.truncated) {
+          return JSON.parse(new TextDecoder().decode(bytesOf(body.content.replace(/\n/g, ""))));
+        }
+      }
+      var raw = await fetch("https://raw.githubusercontent.com/mentaladversity/mentaladversity/main/inbox.enc", { cache: "no-store" });
+      if (raw.status === 404) return null;
+      if (!raw.ok) throw new Error("nope");
+      return raw.json();
+    }
+
+    async function unseal(packed, key) {
+      var material = await crypto.subtle.importKey("raw", new TextEncoder().encode(key), "PBKDF2", false, ["deriveKey"]);
+      var aes = await crypto.subtle.deriveKey(
+        { name: "PBKDF2", salt: bytesOf(packed.salt), iterations: packed.iter || 200000, hash: "SHA-256" },
+        material,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["decrypt"]
+      );
+      try {
+        var clear = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytesOf(packed.iv) }, aes, bytesOf(packed.ct));
+        var items = JSON.parse(new TextDecoder().decode(clear));
+        return Array.isArray(items) ? items : [];
+      } catch (err) {
+        throw new Error("bad key");
+      }
+    }
+
+    function openSealed(key) {
+      return pullSealed().then(function (packed) {
+        if (!packed) {
+          statusNode.textContent = "couldn't open the inbox";
+          pile.innerHTML = "";
+          return;
+        }
+        return unseal(packed, key).then(function (items) {
+          sessionStorage.setItem("inbox-key", key);
+          statusNode.textContent = items.length ? items.length + " sent" : "nothing yet.";
+          paint(items, false);
+        });
+      }).catch(function (err) {
+        statusNode.textContent = err.message === "bad key" ? "that key didn't work" : "couldn't open the inbox";
+        pile.innerHTML = "";
       });
     }
 
@@ -78,15 +146,18 @@
       statusNode.textContent = "looking";
       fetch("/api/inbox", { headers: { "X-Inbox-Key": key } }).then(function (res) {
         if (res.status === 401) throw new Error("bad key");
-        if (!res.ok) throw new Error("nope");
+        if (!res.ok) throw new Error("sealed");
         return res.json();
       }).then(function (data) {
         sessionStorage.setItem("inbox-key", key);
-        statusNode.textContent = (data.items || []).length + " sent";
-        paint(data.items || []);
+        showItems(data.items || []);
       }).catch(function (err) {
-        statusNode.textContent = err.message === "bad key" ? "that key didn't work" : "couldn't open the inbox";
-        pile.innerHTML = "";
+        if (err.message === "bad key") {
+          statusNode.textContent = "that key didn't work";
+          pile.innerHTML = "";
+          return;
+        }
+        openSealed(key);
       });
     }
 

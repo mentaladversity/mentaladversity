@@ -1,3 +1,4 @@
 .inbox-secret
+.inbox-seal
 inbox-data.json
 __pycache__/
