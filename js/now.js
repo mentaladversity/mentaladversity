@@ -9,6 +9,8 @@
   var playAt = 0;
   var playLocal = 0;
   var GIST = "10139de4077471515386b5a280439afa";
+  var previewDown = /(?:\?|&)down=1(?:&|$)/.test(location.search);
+  var lastArt = "";
 
   function clock(ms) {
     var s = Math.max(0, Math.floor(ms / 1000));
@@ -26,7 +28,7 @@
     var box = document.getElementById("now");
     box.hidden = false;
     box.classList.add("bare");
-    box.classList.remove("nodur");
+    box.classList.remove("nodur", "lasted");
     document.getElementById("nowtitle").textContent = label;
     document.getElementById("nowartist").textContent = "";
     document.getElementById("nowart").hidden = true;
@@ -44,15 +46,53 @@
     return ms;
   }
 
+  function markServer(down) {
+    var box = document.getElementById("monitorbox");
+    if (box) box.classList.toggle("down", !!down);
+  }
+
+  function gone(info) {
+    if (previewDown) return true;
+    if (!info || typeof info.at !== "number" || info.at < 1000000000000) return false;
+    return Date.now() - info.at > 210000;
+  }
+
+  function paintLast(info) {
+    var box = document.getElementById("now");
+    var title = (info && info.title) || anchor.title || "";
+    var art = (info && info.art) || lastArt || "";
+    box.hidden = false;
+    box.classList.remove("nodur");
+    box.classList.toggle("bare", !art);
+    box.classList.add("lasted");
+    document.getElementById("nowtitle").textContent = title ? "Last played: " + title : "Last played";
+    document.getElementById("nowartist").textContent = "";
+    var img = document.getElementById("nowart");
+    if (art) {
+      img.hidden = false;
+      if (img.src !== art) img.src = art;
+      img.alt = title;
+    } else {
+      img.hidden = true;
+    }
+    document.getElementById("nowtime").textContent = "";
+    document.getElementById("nowfill").style.width = "0";
+    anchor.playing = false;
+    markServer(true);
+    note("");
+  }
+
   function paintSong(info) {
     var box = document.getElementById("now");
     box.hidden = false;
-    box.classList.remove("bare");
+    box.classList.remove("bare", "lasted");
     box.classList.toggle("nodur", !info.duration);
+    markServer(false);
     document.getElementById("nowtitle").textContent = info.title;
     document.getElementById("nowartist").textContent = info.artist || "";
     var img = document.getElementById("nowart");
     if (info.art) {
+      lastArt = info.art;
       img.hidden = false;
       if (img.src !== info.art) img.src = info.art;
       img.alt = info.title;
@@ -104,6 +144,10 @@
   }
 
   function show(info) {
+    if (gone(info)) {
+      paintLast(info);
+      return;
+    }
     paintSong(info);
     if (typeof info.at === "number") showPublic(info);
     else showLocal(info);
@@ -111,6 +155,11 @@
   }
 
   function quiet(open, at) {
+    if (gone({ at: at || 0 }) && (anchor.title || previewDown)) {
+      paintLast({ title: anchor.title, art: lastArt });
+      return;
+    }
+    markServer(false);
     paintEmpty(open ? "nothing playing" : "spotify isn't open");
     if (at) anchor.snapAt = at;
     var key = open ? "quiet" : "closed";

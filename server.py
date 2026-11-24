@@ -360,7 +360,7 @@ def _mirror():
             continue
         key = (snap["title"], snap["artist"], snap["art"], bool(snap["playing"]), bool(snap["open"]))
         changed = key != last
-        due = bool(snap["playing"]) and (time.time() - last_gist) >= 15
+        due = (time.time() - last_gist) >= (15 if snap["playing"] else 45)
         if not changed and not due:
             continue
         if not token:
@@ -370,9 +370,10 @@ def _mirror():
         rich = dict(snap)
         if wave:
             rich["wave"] = wave
-        blob = _scope_blob(snap["at"])
-        if blob:
-            rich["scope"] = blob
+        if snap["playing"]:
+            blob = _scope_blob(snap["at"])
+            if blob:
+                rich["scope"] = blob
         try:
             _patch_gist(token, rich)
         except Exception as err:

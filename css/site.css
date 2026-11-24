@@ -221,6 +221,18 @@ header p {
   background: #fff;
 }
 
+#scopedown {
+  display: none;
+  height: 220px;
+  margin: 0;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+#monitorbox.down #scope { display: none; }
+#monitorbox.down #scopedown { display: flex; }
+
 #monitorbox.hot { background: #f3f3f3; }
 
 #led {
@@ -328,7 +340,9 @@ header p {
 #now.bare .bar,
 #now.bare #nowtime,
 #now.nodur .bar,
-#now.nodur #nowtime { display: none; }
+#now.nodur #nowtime,
+#now.lasted .bar,
+#now.lasted #nowtime { display: none; }
 
 #now img {
   width: 72px;
@@ -483,7 +497,7 @@ button:hover { background: #111; color: #fff; }
   .gizmo h2 { cursor: default; }
 
   #heart { height: 260px; flex: none; }
-  #scope { height: 180px; }
+  #scope, #scopedown { height: 180px; }
   #pad { height: 200px; }
 
   .sendrow { flex-direction: column; align-items: stretch; }
