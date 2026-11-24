@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>inbox</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="favicon.svg">
+  <link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>inbox</h1>
+      <p>notes and drawings from the bench.</p>
+    </header>
+    <form id="gate" class="sendrow">
+      <input id="key" type="password" placeholder="inbox key" aria-label="inbox key" autocomplete="current-password">
+      <button type="submit">open</button>
+    </form>
+    <p class="quiet" id="gateStatus"></p>
+    <div id="pile"></div>
+  </div>
+  <script>
+    var keyInput = document.getElementById("key");
+    var statusNode = document.getElementById("gateStatus");
+    var pile = document.getElementById("pile");
+    var saved = sessionStorage.getItem("inbox-key");
+    if (saved) keyInput.value = saved;
+
+    function paint(items) {
+      pile.innerHTML = "";
+      if (!items.length) {
+        var empty = document.createElement("p");
+        empty.className = "quiet";
+        empty.textContent = "nothing yet.";
+        pile.appendChild(empty);
+        return;
+      }
+      items.forEach(function (item) {
+        var card = document.createElement("article");
+        card.className = "gizmo";
+        card.style.marginTop = "14px";
+        var title = document.createElement("h2");
+        var who = document.createElement("span");
+        who.textContent = (item.name || "Anon") + "  " + (item.kind || "");
+        var when = document.createElement("span");
+        when.textContent = item.at || "";
+        title.appendChild(who);
+        title.appendChild(when);
+        card.appendChild(title);
+        if (item.text) {
+          var p = document.createElement("p");
+          p.textContent = item.text;
+          card.appendChild(p);
+        }
+        if (item.image) {
+          var img = document.createElement("img");
+          img.src = item.image;
+          img.alt = "drawing from " + (item.name || "Anon");
+          img.style.width = "100%";
+          img.style.display = "block";
+          card.appendChild(img);
+        }
+        var remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "delete";
+        remove.style.marginTop = "10px";
+        remove.addEventListener("click", function () { drop(item.id); });
+        card.appendChild(remove);
+        pile.appendChild(card);
+      });
+    }
+
+    function load() {
+      var key = keyInput.value.trim();
+      if (!key) return;
+      statusNode.textContent = "looking";
+      fetch("/api/inbox", { headers: { "X-Inbox-Key": key } }).then(function (res) {
+        if (res.status === 401) throw new Error("bad key");
+        if (!res.ok) throw new Error("nope");
+        return res.json();
+      }).then(function (data) {
+        sessionStorage.setItem("inbox-key", key);
+        statusNode.textContent = (data.items || []).length + " sent";
+        paint(data.items || []);
+      }).catch(function (err) {
+        statusNode.textContent = err.message === "bad key" ? "that key didn't work" : "couldn't open the inbox";
+        pile.innerHTML = "";
+      });
+    }
+
+    function drop(id) {
+      var key = keyInput.value.trim();
+      fetch("/api/inbox/" + id, { method: "DELETE", headers: { "X-Inbox-Key": key } }).then(function () {
+        load();
+      });
+    }
+
+    document.getElementById("gate").addEventListener("submit", function (e) {
+      e.preventDefault();
+      load();
+    });
+    if (saved) load();
+  </script>
+</body>
+</html>

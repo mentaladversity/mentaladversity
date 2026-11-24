@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ad</title>
+  <meta name="description" content="hi, I'm ad. I like making games and engineering.">
+  <link rel="icon" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/site.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.169.0/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="leaves" aria-hidden="true"></canvas>
+  <p id="hello" aria-label="hi."></p>
+  <div class="wrap">
+    <div class="bench" id="bench">
+      <svg id="wires" aria-hidden="true"></svg>
+
+      <article class="gizmo" id="heartbox">
+        <canvas id="heart" width="640" height="720" aria-label="solid"></canvas>
+        <span class="port" data-port="heart" data-side="bottom"></span>
+        <span class="port" data-port="heart-side" data-side="right"></span>
+      </article>
+
+      <article class="gizmo" id="plate">
+        <div class="copy" id="readcopy"></div>
+        <span class="port" data-port="plate" data-side="bottom"></span>
+      </article>
+
+      <article class="gizmo" id="repos">
+        <div class="copy" id="inboxcopy"></div>
+        <span class="port" data-port="repos-top" data-side="top"></span>
+        <span class="port" data-port="repos-side" data-side="left"></span>
+        <span class="port" data-port="repos" data-side="bottom"></span>
+      </article>
+
+      <article class="gizmo" id="monitorbox">
+        <h2>
+          <span class="knobs">
+            <button type="button" id="kmode">trig</button>
+            <button type="button" id="ktime">mid</button>
+            <button type="button" id="kgain">1x</button>
+          </span>
+        </h2>
+        <canvas id="scope" width="1200" height="280" aria-label="oscilloscope"></canvas>
+        <span class="port" data-port="monitor-in" data-side="top"></span>
+        <span class="port" data-port="monitor-out" data-side="bottom"></span>
+      </article>
+
+      <article class="gizmo" id="spotify">
+        <div id="now" hidden>
+          <img id="nowart" alt="">
+          <div>
+            <p id="nowtitle"></p>
+            <p class="quiet" id="nowartist"></p>
+          </div>
+          <div class="bar" aria-hidden="true"><i id="nowfill"></i></div>
+          <p class="quiet" id="nowtime"></p>
+        </div>
+        <p class="quiet" id="spotmeta"></p>
+        <span class="port" data-port="spotify" data-side="top"></span>
+      </article>
+
+      <article class="gizmo" id="doodle">
+        <h2 aria-label="drag"></h2>
+        <canvas id="pad" width="480" height="320" aria-label="drawing pad"></canvas>
+        <form id="drawform" class="sendrow">
+          <span class="knobs">
+            <button type="button" id="inkthin">thin</button>
+            <button type="button" id="inkmid">mid</button>
+            <button type="button" id="inkthick">thick</button>
+            <button type="button" id="inkeraser">erase</button>
+            <button type="button" id="clearpad">clear</button>
+          </span>
+          <button type="submit">send</button>
+        </form>
+        <span class="port" data-port="doodle" data-side="top"></span>
+        <span class="port" data-port="doodle-out" data-side="bottom"></span>
+      </article>
+
+      <article class="gizmo" id="note">
+        <span class="port" data-port="note" data-side="top"></span>
+        <form id="noteform">
+          <input id="notename" type="text" maxlength="40" placeholder="name" aria-label="name">
+          <textarea id="notetext" rows="1" maxlength="180" placeholder="write anything to your hearts content" aria-label="note"></textarea>
+          <button type="submit">send</button>
+        </form>
+      </article>
+    </div>
+
+    <p class="foot">
+      <a href="inbox.html">inbox</a>
+      <button type="button" id="reset">put the bench back</button>
+    </p>
+  </div>
+
+  <audio id="song" crossorigin="anonymous"></audio>
+  <script src="js/leaves.js"></script>
+  <script src="js/scope.js"></script>
+  <script src="js/now.js"></script>
+  <script type="module" src="js/spaghetti.js"></script>
+</body>
+</html>
