@@ -116,11 +116,10 @@
           pile.innerHTML = "";
           return;
         }
-        return unseal(packed, key).then(function (items) {
-          sessionStorage.setItem("inbox-key", key);
-          statusNode.textContent = items.length ? items.length + " sent" : "nothing yet.";
-          paint(items, false);
-        });
+        var items = unseal(packed, key);
+        sessionStorage.setItem("inbox-key", key);
+        statusNode.textContent = items.length ? items.length + " sent" : "nothing yet.";
+        paint(items, false);
       }).catch(function (err) {
         statusNode.textContent = err.message === "bad key" ? "that key didn't work" : "couldn't open the inbox";
         pile.innerHTML = "";
