@@ -515,13 +515,6 @@ import "./heart.js";
     return "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(addr);
   }
 
-  function decode64(b64) {
-    var bin = atob(String(b64 || "").replace(/\s/g, ""));
-    var bytes = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return new TextDecoder().decode(bytes);
-  }
-
   function letter(text) {
     var esc = String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     esc = esc.replace(/\[([^\]]+)\]\(mailto:([^)\s]+)\)/gi, function (_, label, addr) {
@@ -548,12 +541,12 @@ import "./heart.js";
   }
 
   function pullSheet(file, id) {
-    var url = "https://api.github.com/repos/mentaladversity/mentaladversity/contents/" + file + "?t=" + Date.now();
+    var url = "https://raw.githubusercontent.com/mentaladversity/mentaladversity/main/" + file + "?t=" + Date.now();
     return fetch(url, { cache: "no-store" }).then(function (res) {
       if (!res.ok) throw new Error("nope");
-      return res.json();
-    }).then(function (data) {
-      pour(id, decode64(data.content));
+      return res.text();
+    }).then(function (text) {
+      pour(id, text);
     }).catch(function () {});
   }
 

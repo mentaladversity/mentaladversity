@@ -99,9 +99,9 @@
       if (!samples || samples.length < 8 || peakOf(samples) < 0.04) return false;
       absorb(samples);
       liveAt = performance.now();
-      const step = Math.max(1, Math.floor(samples.length / 8));
+      const step = Math.max(1, Math.floor(samples.length / 40));
       for (let i = 0; i < samples.length; i += step) push(samples[i]);
-      considerLock(false);
+      considerLock(true);
       return true;
     }
 

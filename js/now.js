@@ -1,6 +1,6 @@
 (function () {
   var onTrack = function () {};
-  var anchor = { progress: 0, at: 0, duration: 0, playing: false };
+  var anchor = { progress: 0, at: 0, duration: 0, playing: false, title: "", stall: 0 };
   var lastKey = "";
   var publicAt = 0;
   var sharedWave = [];
@@ -50,9 +50,23 @@
     }
     var live = document.getElementById("spotlive");
     if (live) live.classList.toggle("on", !!info.playing);
-    anchor.progress = info.progress || 0;
+    var shown = anchor.playing
+      ? Math.min(anchor.duration || Infinity, anchor.progress + (performance.now() - anchor.at))
+      : anchor.progress;
+    var next = info.progress || 0;
+    var playing = !!info.playing;
+    var same = info.title && info.title === anchor.title;
+    if (!playing && anchor.playing && same && Math.abs(next - shown) < 3000) {
+      if (!anchor.stall) anchor.stall = performance.now();
+      if (performance.now() - anchor.stall < 2500) playing = true;
+    } else {
+      anchor.stall = 0;
+    }
+    if (playing && anchor.playing && same && next < shown && shown - next < 3000) next = shown;
+    anchor.title = info.title || "";
+    anchor.progress = next;
     anchor.duration = info.duration || 0;
-    anchor.playing = !!info.playing;
+    anchor.playing = playing;
     anchor.at = performance.now();
     var key = (info.playing ? "1" : "0") + "|" + info.title + "|" + (info.artist || "");
     if (key !== lastKey) {
