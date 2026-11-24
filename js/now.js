@@ -3,6 +3,7 @@
   var anchor = { progress: 0, at: 0, duration: 0, playing: false };
   var lastKey = "";
   var publicAt = 0;
+  var sharedWave = [];
 
   function clock(ms) {
     var s = Math.max(0, Math.floor(ms / 1000));
@@ -81,7 +82,7 @@
 
   async function pullPublic() {
     try {
-      var res = await fetch("https://raw.githubusercontent.com/mentaladversity/mentaladversity/main/now.json?t=" + Date.now(), { cache: "no-store" });
+      var res = await fetch("now.json?t=" + Date.now(), { cache: "no-store" });
       if (!res.ok) return null;
       var info = await res.json();
       if (info && info.playing && info.at) {
@@ -108,6 +109,7 @@
       return;
     }
     note("");
+    if ("wave" in data) sharedWave = data.wave || [];
     if (!data.title) {
       quiet(!!data.open);
       return;
@@ -133,5 +135,9 @@
     });
   }
 
-  window.NowPlaying = { start: start, tick: tick };
+  window.NowPlaying = {
+    start: start,
+    tick: tick,
+    wave: function () { return sharedWave; }
+  };
 })();

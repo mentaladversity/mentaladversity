@@ -477,6 +477,7 @@ import "./heart.js";
       for (var i = 0; i < waveBytes.length; i++) samples[i] = (waveBytes[i] - 128) / 128;
       scope.setWave(samples);
     }
+    borrowedWave();
     scope.frame();
     heart.frame(scope.loud(), t || 0);
     leaves.frame(t || 0);
@@ -486,16 +487,30 @@ import "./heart.js";
   }
 
   var seenHit = 0;
+  var heardScope = 0;
+  var spin = 0;
   setInterval(function () {
     if (localAudio && playing && follow) return;
     fetch("/api/spectrum").then(function (res) { return res.json(); }).then(function (data) {
       if (!data) return;
+      heardScope = performance.now();
       if (data.wave) scope.setWave(data.wave);
       if (!data.live || !data.hit || data.hit === seenHit) return;
       seenHit = data.hit;
       flash();
     }).catch(function () {});
   }, 70);
+
+  function borrowedWave() {
+    if (localAudio && playing) return;
+    if (performance.now() - heardScope < 800) return;
+    var wave = NowPlaying.wave();
+    if (!wave || wave.length < 8) return;
+    spin = (spin + 1) % wave.length;
+    var spun = [];
+    for (var i = 0; i < wave.length; i++) spun.push(wave[(i + spin) % wave.length]);
+    scope.setWave(spun);
+  }
 
   function gmail(addr) {
     return "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(addr);

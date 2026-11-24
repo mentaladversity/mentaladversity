@@ -190,18 +190,41 @@ def _put_now(token, payload):
         res.read()
 
 
+def _clip_wave():
+    wave = ears.current().get("wave") or []
+    if not wave:
+        return []
+    step = max(1, len(wave) // 160)
+    out = []
+    for i in range(0, len(wave), step):
+        out.append(round(float(wave[i]), 3))
+        if len(out) >= 160:
+            break
+    peak = 0.0
+    for value in out:
+        peak = max(peak, abs(value))
+    if peak < 0.04:
+        return []
+    return out
+
+
 def _mirror():
     last = None
+    held = False
     token = ""
     while True:
         time.sleep(4)
         try:
             snap = desk.share()
+            wave = _clip_wave()
         except Exception:
             continue
         key = (snap["title"], snap["artist"], snap["art"], bool(snap["playing"]), bool(snap["open"]))
-        if key == last:
+        if key != last:
+            held = False
+        if key == last and (held or not wave):
             continue
+        snap["wave"] = wave
         if not token:
             token = _gh_token()
         if not token:
@@ -209,6 +232,7 @@ def _mirror():
         try:
             _put_now(token, snap)
             last = key
+            held = bool(wave)
         except Exception:
             token = ""
 
