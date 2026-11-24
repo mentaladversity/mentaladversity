@@ -19,7 +19,6 @@ _snap = {
 }
 _art = {"key": "", "url": ""}
 _art_lock = threading.Lock()
-_coast = {"title": "", "pos": 0, "seen": 0.0}
 
 
 def current():
@@ -49,36 +48,7 @@ def share():
         "open": bool(snap.get("open")),
         "at": int(time.time() * 1000),
     }
-    if _heard() and out["title"]:
-        out["playing"] = True
-    out["progress"] = _move(out["title"], out["progress"], out["duration"], out["playing"])
     return out
-
-
-def _heard():
-    try:
-        import ears
-        return bool(ears.current().get("live"))
-    except Exception:
-        return False
-
-
-def _move(title, pos, duration, playing):
-    now = time.time()
-    if not playing:
-        _coast["title"] = title
-        _coast["pos"] = pos
-        _coast["seen"] = now
-        return pos
-    if title != _coast["title"] or abs(pos - _coast["pos"]) > 2500:
-        _coast["title"] = title
-        _coast["pos"] = pos
-        _coast["seen"] = now
-        return pos
-    moved = _coast["pos"] + int((now - _coast["seen"]) * 1000)
-    if duration:
-        moved = min(duration, moved)
-    return max(0, moved)
 
 
 def start():

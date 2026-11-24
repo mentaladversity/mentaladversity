@@ -1,6 +1,6 @@
 (function () {
   var onTrack = function () {};
-  var anchor = { progress: 0, at: 0, duration: 0, playing: false, title: "", stall: 0 };
+  var anchor = { progress: 0, at: 0, duration: 0, playing: false, title: "" };
   var lastKey = "";
   var publicAt = 0;
   var sharedWave = [];
@@ -56,13 +56,7 @@
     var next = info.progress || 0;
     var playing = !!info.playing;
     var same = info.title && info.title === anchor.title;
-    if (!playing && anchor.playing && same && Math.abs(next - shown) < 3000) {
-      if (!anchor.stall) anchor.stall = performance.now();
-      if (performance.now() - anchor.stall < 2500) playing = true;
-    } else {
-      anchor.stall = 0;
-    }
-    if (playing && anchor.playing && same && next < shown && shown - next < 3000) next = shown;
+    if (playing && anchor.playing && same && next < shown && shown - next < 12000) next = shown;
     anchor.title = info.title || "";
     anchor.progress = next;
     anchor.duration = info.duration || 0;
@@ -96,7 +90,8 @@
 
   function catchUp(info) {
     if (info && info.playing && info.at) {
-      var moved = (info.progress || 0) + Math.max(0, Date.now() - info.at);
+      var extra = Math.min(8000, Math.max(0, Date.now() - info.at));
+      var moved = (info.progress || 0) + extra;
       info.progress = info.duration ? Math.min(info.duration, moved) : moved;
     }
     return info;
